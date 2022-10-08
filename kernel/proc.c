@@ -169,6 +169,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->strace_mask_bits = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -311,7 +312,7 @@ fork(void)
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
-
+  np->strace_mask_bits = p->strace_mask_bits;
   release(&np->lock);
 
   acquire(&wait_lock);
