@@ -124,6 +124,9 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  #ifdef FCFS
+  p->ctime = ticks;
+  #endif
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -457,6 +460,40 @@ round_robin(struct cpu *c) {
 }
 #endif
 
+#ifdef FCFS
+void
+fcfs(struct cpu *c) {
+  int minimun_time = 0
+  struct proc *proc_with_min_time = 0;
+
+  for(struct proc *p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if(p->state == RUNNABLE) {
+      if(minimun_time == 0 || p->ctime < minimun_time) {
+        minimun_time = p->ctime;
+        proc_with_min_time = p;
+      }
+    }
+    if(minproc != p) {
+      release(&p->lock);
+    }
+  }
+
+  if(minproc) {
+    //Switch to chosen process.  It is the process's job
+    // to release its lock and then reacquire it
+    // before jumping back to us.
+    minproc->state = RUNNING;
+    c->proc = minproc;
+    swtch(&c->context, &minproc->context);
+
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    c->proc = 0;
+  }
+}
+#endif
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -476,6 +513,10 @@ scheduler(void)
 
     #ifdef ROUND_ROBIN
     round_robin(c);
+    #endif
+
+    #ifdef FCFS
+    fcfs(c);
     #endif
   }
 }
