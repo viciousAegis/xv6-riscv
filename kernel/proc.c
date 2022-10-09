@@ -463,29 +463,29 @@ round_robin(struct cpu *c) {
 #ifdef FCFS
 void
 fcfs(struct cpu *c) {
-  int minimun_time = 0
+  int minimum_time = 0;
   struct proc *proc_with_min_time = 0;
 
   for(struct proc *p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
     if(p->state == RUNNABLE) {
-      if(minimun_time == 0 || p->ctime < minimun_time) {
-        minimun_time = p->ctime;
+      if(minimum_time == 0 || p->ctime < minimum_time) {
+        minimum_time = p->ctime;
         proc_with_min_time = p;
       }
     }
-    if(minproc != p) {
+    if(proc_with_min_time != p) {
       release(&p->lock);
     }
   }
 
-  if(minproc) {
+  if(proc_with_min_time != 0) {
     //Switch to chosen process.  It is the process's job
     // to release its lock and then reacquire it
     // before jumping back to us.
-    minproc->state = RUNNING;
-    c->proc = minproc;
-    swtch(&c->context, &minproc->context);
+    proc_with_min_time->state = RUNNING;
+    c->proc = proc_with_min_time;
+    swtch(&c->context, &proc_with_min_time->context);
 
     // Process is done running for now.
     // It should have changed its p->state before coming back.
