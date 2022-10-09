@@ -102,6 +102,8 @@ extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 extern uint64 sys_trace(void);
+extern uint64 sys_sigalarm(void);
+extern uint64 sys_sigreturn(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -128,6 +130,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_trace]   sys_trace,
+[SYS_sigalarm] sys_sigalarm,
+[SYS_sigreturn] sys_sigreturn,
 };
 
 // An array mapping syscall numbers from syscall.h
@@ -155,38 +159,17 @@ char *syscall_namelist[] = {
   [SYS_mkdir]  "mkdir",
   [SYS_close]  "close",
   [SYS_trace]  "trace",
+  [SYS_sigalarm] "sigalarm",
+  [SYS_sigreturn] "sigreturn",
 };
 
 //An array mapping syscall numbers from syscall.h
 // to the number of args the command should have
-int syscall_argnums[] = {
-  [SYS_fork]   0,
-  [SYS_exit]   1,
-  [SYS_wait]   1,
-  [SYS_pipe]   1,
-  [SYS_read]   3,
-  [SYS_kill]   1,
-  [SYS_exec]   2,
-  [SYS_fstat]  2,
-  [SYS_chdir]  1,
-  [SYS_dup]    1,
-  [SYS_getpid] 0,
-  [SYS_sbrk]   1,
-  [SYS_sleep]  1,
-  [SYS_uptime] 0,
-  [SYS_open]   2,
-  [SYS_write]  3,
-  [SYS_mknod]  3,
-  [SYS_unlink] 1,
-  [SYS_link]   2,
-  [SYS_mkdir]  1,
-  [SYS_close]  1,
-  [SYS_trace]  1,
-};
 
+int syscall_argnums[24] = {0,1,1,1,3,1,2,2,1,1,0,1,1,0,2,3,3,1,2,1,1,1,2,0};
 void print_strace(struct proc *p, int j){
   printf("%d: syscall %s (", p->pid, syscall_namelist[j]);
-  int no_args = syscall_argnums[j];
+  int no_args = syscall_argnums[--j];
   for(int i=0; i<no_args; i++){
     int arg;
     argint(i, &arg);

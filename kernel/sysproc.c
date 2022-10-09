@@ -99,3 +99,22 @@ sys_trace(void)
   p->strace_mask_bits = n;
   return 0;
 }
+
+uint64
+sys_sigalarm()
+{
+  struct proc *p = myproc();
+  argint(0, &p->ticks);
+  argaddr(1, &p->hndlr);
+  return 0;
+}
+
+uint64
+sys_sigreturn(void) 
+{
+  struct proc *p = myproc();
+  long unsigned int sz = sizeof(struct trapframe);
+  memmove(p->trapframe, p->bkuptframe, sz);
+  p->handling = 0;
+  return 0;
+}

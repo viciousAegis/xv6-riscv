@@ -134,7 +134,11 @@ found:
     release(&p->lock);
     return 0;
   }
-
+  //Make a trapframe page backup for timer interrupt
+  if((p->bkuptframe = (struct trapframe *)kalloc()) == 0) {
+    release(&p->lock);
+    return 0;
+  }
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -148,7 +152,11 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
+  //Added for initialisation
+  p->timepassed = 0;
+  p->ticks = 0;
+  p->hndlr = 0;
+  p->handling = 0;
   return p;
 }
 
@@ -161,6 +169,10 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+  if(p->bkuptframe){
+    kfree((void *)p->bkuptframe);
+    p->bkuptframe = 0;
+  }
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;

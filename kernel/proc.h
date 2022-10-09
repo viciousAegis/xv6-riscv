@@ -105,6 +105,11 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   int strace_mask_bits;        // Mask bits for strace syscall
+  int ticks;                   // Ticks in timer
+  int timepassed;              // Number of ticks passed
+  uint64 hndlr;                // Alarm handler
+  int handling;                // Checking if timer interrupt is being handled
+  struct trapframe* bkuptframe; // Backup trapframe
   #ifdef FCFS
   int ctime;                  // Creation time
   #endif
