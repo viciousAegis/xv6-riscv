@@ -478,14 +478,20 @@ fcfs(struct cpu *c) {
   int minimum_time = 0;
   struct proc *proc_with_min_time = 0;
 
+  // go through all processes and find the one with the minimum creation time
   for(struct proc *p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
     if(p->state == RUNNABLE) {
-      if(minimum_time == 0 || p->ctime < minimum_time) {
-        minimum_time = p->ctime;
+      // if there is no current process, or the process p has a greater creation time than the current process,
+      // then we set the current minimum process to the process p
+      if(proc_with_min_time == 0 || p->ctime < minimum_time) {
+        if(proc_with_min_time!= 0) {
+          release(&proc_with_min_time->lock); // release the lock of the previous minimum process so that new process can acquire it
+        }
         proc_with_min_time = p;
       }
     }
+    // if current process is not the same as the minimum process, then release the lock of the current process
     if(proc_with_min_time != p) {
       release(&p->lock);
     }
@@ -502,6 +508,8 @@ fcfs(struct cpu *c) {
     // Process is done running for now.
     // It should have changed its p->state before coming back.
     c->proc = 0;
+    // release the lock once process is done running
+    release(&proc_with_min_time->lock);
   }
 }
 #endif

@@ -87,7 +87,8 @@ usertrap(void)
   if(killed(p))
     exit(-1);
 
-  #ifndef FCFS
+  // preempt only when using round-robin scheduler.
+  #if defined(ROUNDROBIN)
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
     yield();
@@ -163,7 +164,8 @@ kerneltrap()
     panic("kerneltrap");
   }
 
-  #ifndef FCFS
+  // preempt only when using round-robin scheduler.
+  #if defined(ROUNDROBIN)
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING)
     yield();
@@ -180,6 +182,9 @@ clockintr()
 {
   acquire(&tickslock);
   ticks++;
+  #ifdef PBS
+  record_time();
+  #endif
   wakeup(&ticks);
   release(&tickslock);
 }
