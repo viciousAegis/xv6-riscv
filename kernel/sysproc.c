@@ -95,6 +95,7 @@ sys_trace(void)
 {
   int n;
   argint(0, &n);
-  myproc()->strace_mask_bits = n;
+  struct proc* p = myproc();
+  p->strace_mask_bits = n;
   return 0;
 }
