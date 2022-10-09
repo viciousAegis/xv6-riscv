@@ -186,16 +186,13 @@ int syscall_argnums[] = {
 
 void print_strace(struct proc *p, int j){
   printf("%d: syscall %s (", p->pid, syscall_namelist[j]);
-  for(int i=0; i<syscall_argnums[j]; i++){
+  int no_args = syscall_argnums[j];
+  for(int i=0; i<no_args; i++){
     int arg;
     argint(i, &arg);
-    printf("%d",arg);
-    if(i != syscall_argnums[j]-1)
-    {
-      printf(" ");
-    }
+    printf("%d ",arg);
   }
-  printf(") -> %d\n", p->trapframe->a0);
+  printf("\b) -> %d\n", p->trapframe->a0);
 }
 
 
