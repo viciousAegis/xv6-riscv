@@ -104,6 +104,7 @@ extern uint64 sys_close(void);
 extern uint64 sys_trace(void);
 extern uint64 sys_sigalarm(void);
 extern uint64 sys_sigreturn(void);
+extern uint64 sys_set_priority(void);
 extern uint64 sys_waitx(void);
 
 // An array mapping syscall numbers from syscall.h
@@ -133,6 +134,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_trace]   sys_trace,
 [SYS_sigalarm] sys_sigalarm,
 [SYS_sigreturn] sys_sigreturn,
+[SYS_set_priority] sys_set_priority,
 [SYS_waitx]   sys_waitx,
 };
 
@@ -163,13 +165,14 @@ char *syscall_namelist[] = {
   [SYS_trace]  "trace",
   [SYS_sigalarm] "sigalarm",
   [SYS_sigreturn] "sigreturn",
+  [SYS_set_priority] "set_priority",
   [SYS_waitx]  "waitx",
 };
 
 //An array mapping syscall numbers from syscall.h
 // to the number of args the command should have
 
-int syscall_argnums[24] = {0,1,1,1,3,1,2,2,1,1,0,1,1,0,2,3,3,1,2,1,1,1,2,0};
+int syscall_argnums[25] = {0,1,1,1,3,1,2,2,1,1,0,1,1,0,2,3,3,1,2,1,1,1,2,0,1};
 void print_strace(struct proc *p, int j){
   printf("%d: syscall %s (", p->pid, syscall_namelist[j]);
   int no_args = syscall_argnums[--j];

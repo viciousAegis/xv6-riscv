@@ -121,6 +121,20 @@ sys_sigreturn(void)
 }
 
 uint64
+sys_set_priority(void)
+{
+  #ifndef PBS
+  return -1;
+  #endif
+  int priority, pid;
+  int old_p = -1;
+  argint(0, &priority);
+  argint(1, &pid);
+  set_priority(priority, pid, &old_p);
+  return old_p;
+}
+
+uint64
 sys_waitx(void)
 {
   uint64 addr, addr1, addr2;

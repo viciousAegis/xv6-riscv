@@ -123,10 +123,15 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
+
   p->ctime = ticks;
   p->rtime = 0;
   p->stime = 0;
   p->sched_count = 0;
+
+  #ifdef PBS
+  p->priority = 60;
+  #endif
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -191,6 +196,9 @@ freeproc(struct proc *p)
   p->stime = 0;
   p->sched_count = 0;
   p->endtime = 0;
+  #ifdef PBS
+  p->priority = 60;
+  #endif
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -574,6 +582,102 @@ fcfs(struct cpu *c) {
 }
 #endif
 
+#ifdef PBS
+void set_priority(int priority, int pid, int* old_priority)
+{
+  for(struct proc *p = proc; p < &proc[NPROC]; p++) {
+    if(p->pid == pid) {
+      acquire(&p->lock);
+      *old_priority = p->priority;
+      p->priority = priority;
+      p->rtime = 0;
+      p->stime = 0;
+      release(&p->lock);
+      if(*old_priority > priority) {
+        yield();
+      }
+    }
+  }
+}
+
+int dynamic_priority(struct proc *p)
+{
+  int niceness;
+  int dp;
+
+  if(p->rtime + p->stime != 0)
+    niceness = (p->stime / (p->rtime + p->stime)) * 10;
+  else
+  {
+    niceness = 5;
+  }
+
+  dp = p->priority - niceness + 5;
+
+  if(dp > 100)
+  {
+    dp = 100;
+  }
+  return dp;
+}
+
+void
+pbs(struct cpu *c)
+{
+  struct proc *minproc = 0;
+  for(struct proc *p = proc; p < &proc[NPROC]; p++)
+  {
+    acquire(&p->lock);
+    if(p->state == RUNNABLE)
+    {
+      if(minproc == 0)
+      {
+        minproc = p;
+        continue;
+      }
+
+      if(dynamic_priority(minproc) > dynamic_priority(p))
+      {
+        release(&minproc->lock);
+        minproc = p;
+        continue;
+      }
+
+      if(dynamic_priority(minproc) == dynamic_priority(p))
+      {
+        if(minproc->sched_count > p->sched_count)
+        {
+          release(&minproc->lock);
+          minproc = p;
+          continue;
+        }
+        else if(minproc->sched_count == p->sched_count)
+        {
+          if(minproc->ctime > p->ctime)
+          {
+            release(&minproc->lock);
+            minproc = p;
+            continue;
+          }
+        }
+      }
+    }
+    release(&p->lock);
+  }
+
+  if(minproc != 0)
+  {
+    minproc->sched_count++;
+    minproc->state = RUNNING;
+    minproc->rtime = 0;
+    minproc->stime = 0;
+    c->proc = minproc;
+    swtch(&c->context, &minproc->context);
+    c->proc = 0;
+    release(&minproc->lock);
+  }
+}
+#endif
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -597,6 +701,10 @@ scheduler(void)
 
     #ifdef FCFS
     fcfs(c);
+    #endif
+
+    #ifdef PBS
+    pbs(c);
     #endif
   }
 }
@@ -826,7 +934,15 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
+    #ifdef ROUND_ROBIN
     printf("%d %s %s", p->pid, state, p->name);
+    #endif
+    #ifdef FCFS
+    printf("%d %s %s %d", p->pid, state, p->name, p->ctime);
+    #endif
+    #ifdef PBS
+    printf("%d %d %s %s %d %d %d", p->pid, dynamic_priority(p), state, p->name, p->rtime, p->stime, p->sched_count);
+    #endif
     printf("\n");
   }
 }

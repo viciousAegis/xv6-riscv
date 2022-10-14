@@ -115,4 +115,8 @@ struct proc {
   uint64 stime;                  // Sleeping time
   uint64 endtime;               // End time
   int sched_count;              // Number of times scheduled
+
+  #ifdef PBS
+  int priority;                 // Priority of process
+  #endif
 };
