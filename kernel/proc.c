@@ -123,10 +123,10 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
-  p->state = USED;
-  #ifdef FCFS
   p->ctime = ticks;
-  #endif
+  p->rtime = 0;
+  p->stime = 0;
+  p->sched_count = 0;
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -157,6 +157,8 @@ found:
   p->ticks = 0;
   p->hndlr = 0;
   p->handling = 0;
+
+  p->state = USED;
   return p;
 }
 
@@ -185,6 +187,10 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
   p->strace_mask_bits = 0;
+  p->rtime = 0;
+  p->stime = 0;
+  p->sched_count = 0;
+  p->endtime = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -393,6 +399,7 @@ exit(int status)
 
   p->xstate = status;
   p->state = ZOMBIE;
+  p->endtime = ticks;
 
   release(&wait_lock);
 
@@ -450,12 +457,64 @@ wait(uint64 addr)
   }
 }
 
+// Wait for a child process to exit and return its pid.
+// Return -1 if this process has no children.
+int
+waitx(uint64 addr, uint* rtime, uint* wtime)
+{
+  struct proc *np;
+  int havekids, pid;
+  struct proc *p = myproc();
+
+  acquire(&wait_lock);
+
+  for(;;){
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for(np = proc; np < &proc[NPROC]; np++){
+      if(np->parent == p){
+        // make sure the child isn't still in exit() or swtch().
+        acquire(&np->lock);
+
+        havekids = 1;
+        if(np->state == ZOMBIE){
+          // Found one.
+          pid = np->pid;
+          *rtime = np->rtime;
+          *wtime = np->endtime - np->ctime - np->rtime;
+          if(addr != 0 && copyout(p->pagetable, addr, (char *)&np->xstate,
+                                  sizeof(np->xstate)) < 0) {
+            release(&np->lock);
+            release(&wait_lock);
+            return -1;
+          }
+          freeproc(np);
+          release(&np->lock);
+          release(&wait_lock);
+          return pid;
+        }
+        release(&np->lock);
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || p->killed){
+      release(&wait_lock);
+      return -1;
+    }
+
+    // Wait for a child to exit.
+    sleep(p, &wait_lock);  //DOC: wait-sleep
+  }
+}
+
 #ifdef ROUND_ROBIN
 void
 round_robin(struct cpu *c) {
   for(struct proc *p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
+        p->sched_count++;
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
@@ -498,6 +557,7 @@ fcfs(struct cpu *c) {
   }
 
   if(proc_with_min_time != 0) {
+    proc_with_min_time->sched_count++;
     //Switch to chosen process.  It is the process's job
     // to release its lock and then reacquire it
     // before jumping back to us.
@@ -541,6 +601,25 @@ scheduler(void)
   }
 }
 
+void
+update_time()
+{
+  struct proc *p;
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    switch(p->state){
+      case RUNNING:
+        p->rtime++;
+      break;
+      case SLEEPING:
+        p->stime++;
+      break;
+      default:
+      break;
+    }
+    release(&p->lock);
+  }
+}
 // Switch to scheduler.  Must hold only p->lock
 // and have changed proc->state. Saves and restores
 // intena because intena is a property of this

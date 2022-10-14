@@ -187,9 +187,7 @@ clockintr()
 {
   acquire(&tickslock);
   ticks++;
-  #ifdef PBS
-  record_time();
-  #endif
+  update_time();
   wakeup(&ticks);
   release(&tickslock);
 }

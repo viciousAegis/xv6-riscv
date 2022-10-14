@@ -110,7 +110,9 @@ struct proc {
   uint64 hndlr;                // Alarm handler
   int handling;                // Checking if timer interrupt is being handled
   struct trapframe* bkuptframe; // Backup trapframe
-  #ifdef FCFS
-  int ctime;                  // Creation time
-  #endif
+  uint64 ctime;                  // Creation time
+  uint64 rtime;                  // Running time
+  uint64 stime;                  // Sleeping time
+  uint64 endtime;               // End time
+  int sched_count;              // Number of times scheduled
 };
