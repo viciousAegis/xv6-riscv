@@ -119,8 +119,31 @@ struct proc {
   #ifdef LBS
   int tickets;                  // Number of tickets
   #endif
-  
+
   #ifdef PBS
   int priority;                 // Priority of process
   #endif
+
+  #ifdef MLFQ
+  int priority;                 // Priority of process
+  int in_queue;                 // Whether process is in queue
+  int quanta;                   // Number of ticks process has been running
+  int q_in_time;                
+  int qrtime[NMLFQ];
+  #endif
 };
+
+#ifdef MLFQ
+struct queue {
+  int head;
+  int tail;
+  int size;
+
+  struct proc* procs[NPROC];
+};
+
+struct proc *top(struct queue *q);
+void queue_push(struct queue *q, struct proc *p);
+void queue_pop(struct queue *q);
+void queue_remove(struct queue *q, int pid);
+#endif

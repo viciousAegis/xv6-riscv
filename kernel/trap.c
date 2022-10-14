@@ -11,6 +11,10 @@ uint ticks;
 
 extern char trampoline[], uservec[], userret[];
 
+#ifdef MLFQ
+extern struct queue mlfq[NMLFQ];
+#endif
+
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
 
@@ -99,6 +103,26 @@ usertrap(void)
     yield();
   #endif
 
+
+  #ifdef MLFQ
+  if(which_dev == 2 && myproc() && myproc()->state == RUNNING)
+  {
+    struct proc *p = myproc();
+    if(p->quanta <= 0)
+    {
+      p->priority = p->priority != NMLFQ -1 ? p->priority + 1 : p->priority;
+      yield();
+    }
+    for(int i = 0; i < p->priority; i++)
+    {
+      if(mlfq[i].size)
+      {
+        yield();
+      }
+    }
+  }
+  #endif
+
   usertrapret();
 }
 
@@ -170,11 +194,29 @@ kerneltrap()
   }
 
   // preempt only when using round-robin scheduler or the lottery scheduler
-  #if defined(ROUND_ROBIN) || defined(LBS)
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING)
+  {
+  #if defined(ROUND_ROBIN) || defined(LBS)
     yield();
   #endif
+
+  #ifdef MLFQ
+    struct proc *p = myproc();
+    if(p->quanta <= 0)
+    {
+      p->priority = p->priority != NMLFQ -1 ? p->priority + 1 : p->priority;
+      yield();
+    }
+    for(int i = 0; i < p->priority; i++)
+    {
+      if(mlfq[i].size)
+      {
+        yield();
+      }
+    }
+    #endif
+  }
 
   // the yield() may have caused some traps to occur,
   // so restore trap registers for use by kernelvec.S's sepc instruction.

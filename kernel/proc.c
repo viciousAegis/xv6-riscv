@@ -12,6 +12,10 @@ struct proc proc[NPROC];
 
 struct proc *initproc;
 
+#ifdef MLFQ
+struct queue mlfq[NMLFQ];
+#endif
+
 int nextpid = 1;
 struct spinlock pid_lock;
 
@@ -56,6 +60,14 @@ procinit(void)
       p->state = UNUSED;
       p->kstack = KSTACK((int) (p - proc));
   }
+#ifdef MLFQ
+  for (int i = 0; i < NMLFQ; i++)
+  {
+    mlfq[i].size = 0;
+    mlfq[i].head = 0;
+    mlfq[i].tail = 0;
+  }
+#endif
 }
 
 // Must be called with interrupts disabled,
@@ -136,6 +148,18 @@ found:
   #ifdef PBS
   p->priority = 60;
   #endif
+
+  #ifdef MLFQ
+  p->priority = 0;
+  p->in_queue = 0;
+  p->quanta = 1;
+  p->q_in_time = ticks;
+  for(int i = 0; i < NMLFQ; i++)
+  {
+    p->qrtime[i] = 0;
+  }
+  #endif
+
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -796,6 +820,80 @@ pbs(struct cpu *c)
   }
 }
 #endif
+
+#ifdef MLFQ
+void
+mlfq_sched(struct cpu *c)
+{
+  struct proc *minproc = 0;
+  // reset priority of old procs
+  for(struct proc *p = proc; p < &proc[NPROC];p++ )
+  {
+    if(p->state != RUNNABLE)
+    {
+      continue;
+    }
+
+    if(ticks - p->q_in_time >= AGETICKS)
+    {
+      p->q_in_time = ticks;
+      if(p->in_queue)
+      {
+        queue_remove(&mlfq[p->priority], p->pid);
+        p->in_queue = 0;
+      }
+
+      if(p->priority > 0) p->priority--;
+    }
+  }
+
+  for(struct proc *p = proc; p < &proc[NPROC]; p++)
+  {
+    acquire(&p->lock);
+    if(p->state == RUNNABLE && !p->in_queue)
+    {
+      queue_push(&mlfq[p->priority], p);
+      p->in_queue = 1;
+    }
+    release(&p->lock);
+  }
+
+  for(int i = 0; i < NMLFQ; i++)
+  {
+    while(mlfq[i].size)
+    {
+      struct proc *p = top(&mlfq[i]);
+      acquire(&p->lock);
+      queue_pop(&mlfq[i]);
+      p->in_queue = 0;
+
+      if(p->state == RUNNABLE)
+      {
+        p->q_in_time = ticks;
+        minproc = p;
+        break;
+      }
+      release(&p->lock);
+    }
+    if(minproc != 0)
+    {
+      break;
+    }
+  }
+
+  if(minproc != 0)
+  {
+    minproc->quanta = 1 << minproc->priority;
+    minproc->sched_count++;
+    minproc->state = RUNNING;
+    c->proc = minproc;
+    swtch(&c->context, &minproc->context);
+    c->proc = 0;
+    minproc->q_in_time = ticks;
+    release(&minproc->lock);
+  }
+}
+#endif
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -828,6 +926,10 @@ scheduler(void)
     #ifdef PBS
     pbs(c);
     #endif
+
+    #ifdef MLFQ
+    mlfq_sched(c);
+    #endif
   }
 }
 
@@ -840,6 +942,10 @@ update_time()
     switch(p->state){
       case RUNNING:
         p->rtime++;
+        #ifdef MLFQ
+          p->qrtime[p->priority]++;
+          p->quanta--;
+        #endif
       break;
       case SLEEPING:
         p->stime++;
@@ -1049,6 +1155,18 @@ procdump(void)
   char *state;
 
   printf("\n");
+  #ifdef ROUND_ROBIN
+  printf("PID State Name\n");
+  #endif
+  #ifdef FCFS
+    printf("PID State Name ctime\n");
+  #endif
+  #ifdef PBS
+    printf("PID Priority State Name rtime stime sched_count\n");
+  #endif
+  #ifdef MLFQ
+    printf("PID Priority State rtime stime sched_count q0 q1 q2 q3 q4\n");
+  #endif
   for(p = proc; p < &proc[NPROC]; p++){
     if(p->state == UNUSED)
       continue;
@@ -1068,6 +1186,67 @@ procdump(void)
     #ifdef PBS
     printf("%d %d %s %s %d %d %d", p->pid, dynamic_priority(p), state, p->name, p->rtime, p->stime, p->sched_count);
     #endif
+    #ifdef MLFQ
+    printf("%d %d %s %d %d %d %d %d %d %d %d", p->pid, p->priority, state, p->rtime, p->stime, p->sched_count, p->qrtime[0], p->qrtime[1], p->qrtime[2], p->qrtime[3], p->qrtime[4]);
+    #endif
     printf("\n");
   }
 }
+
+// queue functions
+#ifdef MLFQ
+struct proc *top(struct queue *q) {
+  if(q->size == 0) {
+    return 0;
+  }
+  return q->procs[q->head];
+}
+
+void queue_push(struct queue *q, struct proc *p) {
+  if(q->size == NPROC) {
+    panic("queue is full");
+  }
+  q->procs[q->tail] = p;
+  q->tail = (q->tail + 1) % NPROC;
+  q->size++;
+}
+
+void queue_pop(struct queue *q) {
+  if(q->size == 0) {
+    panic("queue is empty");
+  }
+  q->head = (q->head + 1) % NPROC;
+  q->size--;
+}
+
+void queue_remove(struct queue* q, int pid)
+{
+  for(int curr = q->head; curr != q->tail; curr = (curr+1) % NPROC)
+  {
+    if(q->procs[curr]->pid == pid)
+    {
+      struct proc *temp = q->procs[curr];
+      q->procs[curr] = q->procs[(curr+1) % NPROC];
+      q->procs[(curr+1) % NPROC] = temp;
+    }
+  }
+
+  q->tail--;
+  q->size--;
+
+  if(q->tail < 0)
+  {
+    q->tail = NPROC - 1;
+  }
+}
+#endif
+
+
+#ifdef MLFQ
+void
+printstats()
+{
+  struct proc *p = myproc();
+  printf("pid: %d--->priority: %d\n", p->pid, p->priority);
+}
+#endif
