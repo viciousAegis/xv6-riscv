@@ -108,6 +108,7 @@ int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 void            update_time();
 void            set_priority(int, int, int*);
+void            settickets(int);
 int             waitx(uint64, uint*, uint*);
 
 // swtch.S

@@ -129,6 +129,10 @@ found:
   p->stime = 0;
   p->sched_count = 0;
 
+  #ifdef LBS
+  p->tickets = 1;
+  #endif
+
   #ifdef PBS
   p->priority = 60;
   #endif
@@ -198,6 +202,9 @@ freeproc(struct proc *p)
   p->endtime = 0;
   #ifdef PBS
   p->priority = 60;
+  #endif
+  #ifdef LBS
+  p->tickets = 1;
   #endif
 }
 
@@ -350,6 +357,9 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  #ifdef LBS
+  np->tickets = p->tickets;
+  #endif
   release(&np->lock);
 
   return pid;
@@ -592,6 +602,102 @@ void settickets(int tickets)
   release(&p->lock);
 }
 
+// from FreeBSD.
+int
+do_rand(unsigned long *ctx)
+{
+/*
+ * Compute x = (7^5 * x) mod (2^31 - 1)
+ * without overflowing 31 bits:
+ *      (2^31 - 1) = 127773 * (7^5) + 2836
+ * From "Random number generators: good ones are hard to find",
+ * Park and Miller, Communications of the ACM, vol. 31, no. 10,
+ * October 1988, p. 1195.
+ */
+    long hi, lo, x;
+
+    /* Transform to [1, 0x7ffffffe] range. */
+    x = (*ctx % 0x7ffffffe) + 1;
+    hi = x / 127773;
+    lo = x % 127773;
+    x = 16807 * lo - 2836 * hi;
+    if (x < 0)
+        x += 0x7fffffff;
+    /* Transform to [0, 0x7ffffffd] range. */
+    x--;
+    *ctx = x;
+    return (x);
+}
+
+unsigned long rand_next = 1;
+
+int
+rand(void)
+{
+    return (do_rand(&rand_next));
+}
+
+int
+get_random_ticket(int a, int b)
+{
+    if(a > b) {
+        int temp = a;
+        a = b;
+        b = temp;
+    }
+
+    int range = b - a + 1;
+    int r = rand() % range;
+    return (a + r);
+}
+
+void
+lbs(struct cpu *c)
+{
+  int total_tickets = 0;
+  struct proc *lucky_proc = 0;
+
+  for(struct proc *p = proc; p < &proc[NPROC]; p++)
+  {
+    acquire(&p->lock);
+    if(p->state == RUNNABLE)
+    {
+      total_tickets += p->tickets;
+    }
+    release(&p->lock);
+  }
+
+  int lucky_ticket = get_random_ticket(0, total_tickets);
+
+  total_tickets = 0;
+
+  for(struct proc *p = proc; p < &proc[NPROC]; p++)
+  {
+    acquire(&p->lock);
+    if(p->state == RUNNABLE)
+    {
+      total_tickets += p->tickets;
+      if(total_tickets >= lucky_ticket)
+      {
+        lucky_proc = p;
+        break;
+      }
+    }
+    release(&p->lock);
+  }
+
+  if(lucky_proc != 0)
+  {
+    lucky_proc->sched_count++;
+    lucky_proc->state = RUNNING;
+    c->proc = lucky_proc;
+    swtch(&c->context, &lucky_proc->context);
+    c->proc = 0;
+    release(&lucky_proc->lock);
+  }
+}
+
+
 #endif
 
 #ifdef PBS
@@ -713,6 +819,10 @@ scheduler(void)
 
     #ifdef FCFS
     fcfs(c);
+    #endif
+
+    #ifdef LBS
+    lbs(c);
     #endif
 
     #ifdef PBS
@@ -951,6 +1061,9 @@ procdump(void)
     #endif
     #ifdef FCFS
     printf("%d %s %s %d", p->pid, state, p->name, p->ctime);
+    #endif
+    #ifdef LBS
+    printf("%d %s %s %d", p->pid, state, p->name, p->tickets);
     #endif
     #ifdef PBS
     printf("%d %d %s %s %d %d %d", p->pid, dynamic_priority(p), state, p->name, p->rtime, p->stime, p->sched_count);

@@ -92,8 +92,8 @@ usertrap(void)
   if(killed(p))
     exit(-1);
 
-  // preempt only when using round-robin scheduler.
-  #if defined(ROUND_ROBIN)
+  // preempt only when using round-robin scheduler or the lottery scheduler
+  #if defined(ROUND_ROBIN) || defined(LBS)
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
     yield();
@@ -169,8 +169,8 @@ kerneltrap()
     panic("kerneltrap");
   }
 
-  // preempt only when using round-robin scheduler.
-  #if defined(ROUND_ROBIN)
+  // preempt only when using round-robin scheduler or the lottery scheduler
+  #if defined(ROUND_ROBIN) || defined(LBS)
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING)
     yield();

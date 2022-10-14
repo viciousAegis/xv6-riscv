@@ -116,6 +116,10 @@ struct proc {
   uint64 endtime;               // End time
   int sched_count;              // Number of times scheduled
 
+  #ifdef LBS
+  int tickets;                  // Number of tickets
+  #endif
+  
   #ifdef PBS
   int priority;                 // Priority of process
   #endif
