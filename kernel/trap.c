@@ -93,7 +93,7 @@ usertrap(void)
     exit(-1);
 
   // preempt only when using round-robin scheduler.
-  #if defined(ROUNDROBIN)
+  #if defined(ROUND_ROBIN)
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
     yield();
@@ -170,7 +170,7 @@ kerneltrap()
   }
 
   // preempt only when using round-robin scheduler.
-  #if defined(ROUNDROBIN)
+  #if defined(ROUND_ROBIN)
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING)
     yield();
@@ -247,7 +247,7 @@ devintr()
 int
 cowfault(pagetable_t pagetable, uint64 va)
 {
-  if (va >= MAXVA) {
+  if (va >= MAXVA || va <= 0) {
     return -1;
   }
 
