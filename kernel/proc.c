@@ -582,6 +582,18 @@ fcfs(struct cpu *c) {
 }
 #endif
 
+#ifdef LBS
+
+void settickets(int tickets)
+{
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  p->tickets = tickets;
+  release(&p->lock);
+}
+
+#endif
+
 #ifdef PBS
 void set_priority(int priority, int pid, int* old_priority)
 {

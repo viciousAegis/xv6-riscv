@@ -135,6 +135,18 @@ sys_set_priority(void)
 }
 
 uint64
+sys_settickets(void)
+{
+  #ifndef LBS
+  return -1;
+  #endif
+  int tickets;
+  argint(0, &tickets);
+  settickets(tickets);
+  return 0;
+}
+
+uint64
 sys_waitx(void)
 {
   uint64 addr, addr1, addr2;

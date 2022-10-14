@@ -26,6 +26,7 @@ int trace(int);
 int sigalarm(int ticks, void(*handler)());
 int sigreturn(void);
 int set_priority(int, int);
+int settickets(int);
 int waitx(int*, int*, int*);
 // ulib.c
 int stat(const char*, struct stat*);
